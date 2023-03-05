@@ -9,6 +9,8 @@
 #include "shader_m.h"
 
 #include <iostream>
+#include <chrono>
+#include <unordered_map>
 
 void framebuffer_size_callback(GLFWwindow* window, int width, int height);
 void mouse_callback(GLFWwindow* window, double xpos, double ypos);
@@ -24,6 +26,8 @@ Camera camera(glm::vec3(0.0f, 0.0f, 3.0f));
 float lastX = SCR_WIDTH / 2.0f;
 float lastY = SCR_HEIGHT / 2.0f;
 bool firstMouse = true;
+bool enable_rotation = false;
+std::unordered_map<int, long> last_time_pressed;
 
 // timing
 float deltaTime = 0.0f; 
@@ -56,11 +60,13 @@ int main()
     }
     glfwMakeContextCurrent(window);
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    glfwSetCursorPosCallback(window, mouse_callback);
-    glfwSetScrollCallback(window, scroll_callback);
 
     // tell GLFW to capture our mouse
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    if(enable_rotation) {
+        glfwSetCursorPosCallback(window, mouse_callback);
+        glfwSetScrollCallback(window, scroll_callback);
+        glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    }
 
     // glad: load all OpenGL function pointers
     // ---------------------------------------
@@ -240,12 +246,43 @@ int main()
     return 0;
 }
 
+bool is_key_pressed_with_delay(GLFWwindow *window, int key, long delay_milis) {
+    std::chrono::time_point current_time_point = std::chrono::system_clock::now();
+    long current_time = std::chrono::duration_cast<std::chrono::milliseconds>(
+            current_time_point.time_since_epoch()).count();
+
+    if(glfwGetKey(window, key)) {
+        if(last_time_pressed.find(key) != last_time_pressed.end() &&
+           current_time - last_time_pressed[key] < delay_milis) {
+            return false;
+        } else {
+            last_time_pressed[key] = current_time;
+
+            return true;
+        }
+    } else {
+        return false;
+    }
+}
+
+
 // process all input: query GLFW whether relevant keys are pressed/released this frame and react accordingly
 // ---------------------------------------------------------------------------------------------------------
 void processInput(GLFWwindow *window)
 {
-    if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
+    if (is_key_pressed_with_delay(window, GLFW_KEY_ESCAPE, 500)) {
+        if (enable_rotation) {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+            glfwSetCursorPosCallback(window, mouse_callback);
+            glfwSetScrollCallback(window, scroll_callback);
+        } else {
+            glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
+            glfwSetCursorPosCallback(window, nullptr);
+            glfwSetScrollCallback(window, nullptr);
+        }
+
+        enable_rotation = !enable_rotation;
+    }
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         camera.ProcessKeyboard(FORWARD, deltaTime);
